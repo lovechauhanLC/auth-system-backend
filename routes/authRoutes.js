@@ -3,6 +3,7 @@ const router = express.Router();
 const authController = require('../controllers/authController');
 const authenticateToken = require('../middleware/authMiddleware');
 const { authLimiter } = require('../middleware/rateLimiter');
+const { requireRole } = require('../middleware/rbacMiddleware');
 
 router.post('/login', authLimiter, authController.login);
 router.post('/register', authLimiter, authController.register);
