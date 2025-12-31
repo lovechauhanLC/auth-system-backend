@@ -1,9 +1,8 @@
-// server.js
 require('dotenv').config();
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
-const db = require('./config/db'); // Import our DB connection
+const db = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
@@ -11,21 +10,16 @@ const { apiLimiter } = require('./middleware/rateLimiter');
 const app = express();
 
 
-// Middleware (Security & Parsing)
-app.use(helmet()); // Secure HTTP headers
-app.use(cors());   // Allow cross-origin requests
-app.use(express.json()); // Parse JSON bodies
+app.use(helmet());
+app.use(cors());
+app.use(express.json());
 
 app.use('/api', apiLimiter);
 
-// Routes
 app.use('/api/auth', authRoutes);
 
-
-// Test Route to verify DB connection
 app.get('/health', async (req, res) => {
     try {
-        // Run a simple query to check DB
         await db.query('SELECT 1');
         res.status(200).json({ status: 'OK', message: 'Database connected successfully' });
     } catch (err) {
