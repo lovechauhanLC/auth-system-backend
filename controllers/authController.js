@@ -65,7 +65,7 @@ exports.login = async (req, res) => {
         const { email, password } = req.body;
 
         const [users] = await db.execute('SELECT * FROM users WHERE email = ?', [email]);
-        
+
         if (users.length === 0) {
             logger.warn(`Failed login attempt: Email ${email} not found`);
             return res.status(401).json({ message: 'Invalid credentials' });
@@ -80,15 +80,21 @@ exports.login = async (req, res) => {
         }
 
         const accessToken = jwt.sign(
-            { userId: user.id, email: user.email }, 
-            process.env.JWT_SECRET, 
+            {
+                id: user.id,          // FIXED
+                email: user.email,
+                role: user.role,      // REQUIRED FOR RBAC
+                status: user.status,
+                created_at: user.created_at
+            },
+            process.env.JWT_SECRET,
             { expiresIn: '15m' }
         );
 
-        const refreshToken = uuidv4(); 
+        const refreshToken = uuidv4();
 
         const refreshHash = await bcrypt.hash(refreshToken, 10);
-        
+
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
@@ -275,7 +281,7 @@ exports.forgotPassword = async (req, res) => {
 
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = await bcrypt.hash(resetToken, 10);
-        
+
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 1);
 
@@ -284,8 +290,8 @@ exports.forgotPassword = async (req, res) => {
             [email, tokenHash, expiresAt]
         );
 
-        const resetLink = `http://localhost:5001/api/auth/reset-password?token=${resetToken}&email=${email}`;
-        
+        const resetLink = `http://localhost:5173/#/reset-password?token=${resetToken}&email=${email}`;
+
         await sendEmail({
             to: email,
             subject: 'Password Reset Request',
@@ -315,12 +321,12 @@ exports.resetPassword = async (req, res) => {
         }
 
         const [requests] = await db.execute(
-            'SELECT * FROM password_resets WHERE email = ? ORDER BY id DESC LIMIT 1', 
+            'SELECT * FROM password_resets WHERE email = ? ORDER BY id DESC LIMIT 1',
             [email]
         );
 
         if (requests.length === 0) return res.status(400).json({ message: 'Invalid or expired token' });
-        
+
         const resetRequest = requests[0];
 
         if (new Date(resetRequest.expires_at) < new Date()) {
