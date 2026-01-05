@@ -19,6 +19,7 @@ exports.register = async (req, res) => {
         const passwordHash = await bcrypt.hash(password, 10);
         const userId = uuidv4();
 
+        // 1. Insert User
         await db.execute(
             'INSERT INTO users (id, email, password_hash) VALUES (?, ?, ?)',
             [userId, email, passwordHash]
@@ -30,12 +31,15 @@ exports.register = async (req, res) => {
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 24);
 
+        // 2. FIXED: Uses 'email' instead of 'user_id' to match your Cloud DB
         await db.execute(
-            'INSERT INTO email_verifications (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
-            [userId, tokenHash, expiresAt]
+            'INSERT INTO email_verifications (email, token_hash, expires_at) VALUES (?, ?, ?)',
+            [email, tokenHash, expiresAt]
         );
 
-        const verificationLink = `http://localhost:5001/api/auth/verify-email?token=${verificationToken}&email=${email}`;
+        // NOTE: Ensure your frontend uses VITE_API_URL so localhost works locally and Render URL works in cloud
+        const baseUrl = process.env.VITE_API_URL || 'http://localhost:5001/api'; 
+        const verificationLink = `${baseUrl}/auth/verify-email?token=${verificationToken}&email=${email}`;
 
         await sendEmail({
             to: email,
@@ -81,9 +85,9 @@ exports.login = async (req, res) => {
 
         const accessToken = jwt.sign(
             {
-                id: user.id,          // FIXED
+                id: user.id,
                 email: user.email,
-                role: user.role,      // REQUIRED FOR RBAC
+                role: user.role,
                 status: user.status,
                 created_at: user.created_at
             },
@@ -92,12 +96,12 @@ exports.login = async (req, res) => {
         );
 
         const refreshToken = uuidv4();
-
         const refreshHash = await bcrypt.hash(refreshToken, 10);
 
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
 
+        // Refresh tokens still use user_id (as per your schema)
         await db.execute(
             'INSERT INTO refresh_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
             [user.id, refreshHash, expiresAt]
@@ -229,15 +233,10 @@ exports.verifyEmail = async (req, res) => {
             return res.status(400).send('Invalid link');
         }
 
-        const [users] = await db.execute('SELECT id, is_verified FROM users WHERE email = ?', [email]);
-        if (users.length === 0) return res.status(400).send('User not found');
-
-        const user = users[0];
-        if (user.is_verified) return res.status(200).send('Email already verified. You can login.');
-
+        // 1. FIXED: Look up verification by EMAIL, not user_id
         const [records] = await db.execute(
-            'SELECT * FROM email_verifications WHERE user_id = ?',
-            [user.id]
+            'SELECT * FROM email_verifications WHERE email = ?',
+            [email]
         );
 
         if (records.length === 0) return res.status(400).send('Invalid or expired token');
@@ -257,8 +256,10 @@ exports.verifyEmail = async (req, res) => {
             return res.status(400).send('Token expired');
         }
 
-        await db.execute('UPDATE users SET is_verified = TRUE WHERE id = ?', [user.id]);
+        // 2. Mark User as Verified
+        await db.execute('UPDATE users SET is_verified = TRUE WHERE email = ?', [email]);
 
+        // 3. Delete the verification record
         await db.execute('DELETE FROM email_verifications WHERE id = ?', [validRecord.id]);
 
         res.send('<h1>Email Verified Successfully!</h1><p>You can now login.</p>');
@@ -278,6 +279,8 @@ exports.forgotPassword = async (req, res) => {
         if (users.length === 0) {
             return res.status(200).json({ message: 'If that email exists, a reset link has been sent.' });
         }
+        
+        const userId = users[0].id; // Get the ID
 
         const resetToken = crypto.randomBytes(32).toString('hex');
         const tokenHash = await bcrypt.hash(resetToken, 10);
@@ -285,9 +288,10 @@ exports.forgotPassword = async (req, res) => {
         const expiresAt = new Date();
         expiresAt.setHours(expiresAt.getHours() + 1);
 
+        // FIXED: Uses 'user_id' for password_resets (Standard schema)
         await db.execute(
-            'INSERT INTO password_resets (email, token_hash, expires_at) VALUES (?, ?, ?)',
-            [email, tokenHash, expiresAt]
+            'INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (?, ?, ?)',
+            [userId, tokenHash, expiresAt]
         );
 
         const resetLink = `http://localhost:5173/#/reset-password?token=${resetToken}&email=${email}`;
@@ -320,9 +324,16 @@ exports.resetPassword = async (req, res) => {
             return res.status(400).json({ message: 'All fields are required' });
         }
 
+        // 1. Get User ID first
+        const [users] = await db.execute('SELECT id FROM users WHERE email = ?', [email]);
+        if (users.length === 0) return res.status(400).json({ message: 'Invalid request' });
+        
+        const userId = users[0].id;
+
+        // 2. FIXED: Look up reset token by user_id
         const [requests] = await db.execute(
-            'SELECT * FROM password_resets WHERE email = ? ORDER BY id DESC LIMIT 1',
-            [email]
+            'SELECT * FROM password_resets WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+            [userId]
         );
 
         if (requests.length === 0) return res.status(400).json({ message: 'Invalid or expired token' });
@@ -337,9 +348,10 @@ exports.resetPassword = async (req, res) => {
         if (!isMatch) return res.status(400).json({ message: 'Invalid token' });
 
         const newPasswordHash = await bcrypt.hash(newPassword, 10);
-        await db.execute('UPDATE users SET password_hash = ? WHERE email = ?', [newPasswordHash, email]);
+        await db.execute('UPDATE users SET password_hash = ? WHERE id = ?', [newPasswordHash, userId]);
 
-        await db.execute('DELETE FROM password_resets WHERE email = ?', [email]);
+        // 3. FIXED: Delete by user_id
+        await db.execute('DELETE FROM password_resets WHERE user_id = ?', [userId]);
 
         logger.info(`Password reset successful for: ${email}`);
         res.status(200).json({ message: 'Password has been reset successfully. You can now login.' });
