@@ -11,8 +11,8 @@ router.post('/register', authLimiter, authController.register);
 router.post('/refresh-token', authController.refreshToken);
 router.post('/logout', authController.logout);
 router.get('/verify-email', authController.verifyEmail);
-router.post('/forgot-password', authLimiter, authController.forgotPassword); 
-router.post('/reset-password', authLimiter, authController.resetPassword);   
+router.post('/forgot-password', authController.forgotPassword); 
+router.post('/reset-password', authController.resetPassword);   
 
 router.get('/profile', authenticateToken, (req, res) => {
     res.json({ 
