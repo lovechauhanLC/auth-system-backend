@@ -10,8 +10,8 @@ const userRoutes = require('./routes/userRoutes');
 
 const app = express();
 
+app.set("trust proxy", 1);
 
-app.use(helmet());
 app.use(cors({
     origin: [
         "http://localhost:5173",
@@ -22,6 +22,10 @@ app.use(cors({
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true
 }));
+
+app.options("*", cors());
+
+app.use(helmet());
 app.use(express.json());
 
 app.use('/api', apiLimiter);
