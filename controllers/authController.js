@@ -2,7 +2,7 @@ const db = require('../config/db');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
-const { sendEmail } = require('../utils/emailService');
+const  sendEmail  = require('../utils/emailService');
 const crypto = require('crypto');
 const logger = require('../utils/logger');
 require('dotenv').config();
