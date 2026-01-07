@@ -94,23 +94,61 @@ Run the following SQL:
 CREATE DATABASE IF NOT EXISTS auth_system;
 USE auth_system;
 
+-- 1. Users Table
 CREATE TABLE users (
-    id VARCHAR(50) PRIMARY KEY,
+    id VARCHAR(36) PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
     role ENUM('user', 'admin', 'manager') DEFAULT 'user',
-    refresh_token TEXT,
+    status ENUM('active', 'locked', 'suspended') DEFAULT 'active',
+    is_verified TINYINT(1) DEFAULT 0,
     failed_login_attempts INT DEFAULT 0,
-    lockout_until DATETIME DEFAULT NULL,
+    lockout_until TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('active', 'locked') DEFAULT 'active'
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- 2. Email Verifications
+CREATE TABLE email_verifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 3. Refresh Tokens
+CREATE TABLE refresh_tokens (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    is_revoked TINYINT(1) DEFAULT 0,
+    replaced_by_token_hash VARCHAR(255) NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 4. Password Resets
 CREATE TABLE password_resets (
-    email VARCHAR(255) NOT NULL,
-    token VARCHAR(255) NOT NULL,
-    expires_at DATETIME NOT NULL,
-    PRIMARY KEY (email)
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(36) NOT NULL,
+    token_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- 5. Audit Logs
+CREATE TABLE auth_audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id VARCHAR(36),
+    action VARCHAR(50) NOT NULL,
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+    details TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
